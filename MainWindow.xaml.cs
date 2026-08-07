@@ -17,6 +17,7 @@ public partial class MainWindow : Window
     private readonly ExchangeRateService _exchangeRates = new();
     private readonly MarketDataStore _marketDataStore = new();
     private readonly CancellationTokenSource _pollCancellation = new();
+    private readonly SemaphoreSlim _processRefreshLock = new(1, 1);
     private readonly object _settingsLock = new();
     private readonly MarketDataCache _marketData;
     private readonly AppSettings _settings;
@@ -44,10 +45,24 @@ public partial class MainWindow : Window
         DetailsGrid.Columns.First(column => column.SortMemberPath == nameof(ProcessRow.CpuPercent)).SortDirection = ListSortDirection.Descending;
         ProcessesGrid.Columns.First(column => column.SortMemberPath == nameof(ProcessRow.CpuPercent)).SortDirection = ListSortDirection.Descending;
         PopulateSettings();
-        Loaded += (_, _) =>
+        Loaded += async (_, _) =>
         {
-            _ = Task.Run(() => PollProcessesAsync(_pollCancellation.Token));
             _ = RefreshMarketDataAsync(force: false);
+            RefreshButton.IsEnabled = false;
+            ProcessesStatus.Text = "Loading processes\u2026";
+            DetailsStatus.Text = "Loading processes\u2026";
+            try
+            {
+                await RefreshProcessesOnceAsync(_pollCancellation.Token);
+                _ = Task.Run(() => PollProcessesAsync(_pollCancellation.Token));
+            }
+            catch (OperationCanceledException) { }
+            catch (Exception ex)
+            {
+                ProcessesStatus.Text = $"Initial load failed: {ex.Message}";
+                DetailsStatus.Text = $"Initial load failed: {ex.Message}";
+            }
+            finally { RefreshButton.IsEnabled = true; }
         };
         Closed += (_, _) => _pollCancellation.Cancel();
     }
@@ -56,16 +71,12 @@ public partial class MainWindow : Window
     {
         while (!cancellationToken.IsCancellationRequested)
         {
+            try { await Task.Delay(TimeSpan.FromMinutes(1), cancellationToken); }
+            catch (OperationCanceledException) { break; }
+
             try
             {
-                // Process inspection, grouping, and price calculations stay entirely off the UI thread.
-                var details = _processService.Capture();
-                var groups = ProcessService.Group(details);
-                PriceSnapshot price;
-                lock (_settingsLock) price = GetPriceSnapshot();
-                CalculateCosts(details, price);
-                CalculateCosts(groups, price);
-                await Dispatcher.InvokeAsync(() => PublishSnapshot(details, groups, price), DispatcherPriority.Background, cancellationToken);
+                await RefreshProcessesOnceAsync(cancellationToken);
             }
             catch (OperationCanceledException) { break; }
             catch (Exception ex)
@@ -73,15 +84,44 @@ public partial class MainWindow : Window
                 await Dispatcher.InvokeAsync(() => DetailsStatus.Text = $"Update failed: {ex.Message}", DispatcherPriority.Background);
             }
 
-            try { await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken); }
-            catch (OperationCanceledException) { break; }
         }
+    }
+
+    private async Task RefreshProcessesOnceAsync(CancellationToken cancellationToken)
+    {
+        await _processRefreshLock.WaitAsync(cancellationToken);
+        try
+        {
+            var details = await Task.Run(_processService.Capture, cancellationToken);
+            var groups = ProcessService.Group(details);
+            PriceSnapshot price;
+            lock (_settingsLock) price = GetPriceSnapshot();
+            CalculateCosts(details, price);
+            CalculateCosts(groups, price);
+            await Dispatcher.InvokeAsync(() => PublishSnapshot(details, groups, price), DispatcherPriority.Background, cancellationToken);
+        }
+        finally { _processRefreshLock.Release(); }
+    }
+
+    private async void RefreshButton_Click(object sender, RoutedEventArgs e)
+    {
+        RefreshButton.IsEnabled = false;
+        ProcessesStatus.Text = "Refreshing\u2026";
+        DetailsStatus.Text = "Refreshing\u2026";
+        try { await RefreshProcessesOnceAsync(_pollCancellation.Token); }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            ProcessesStatus.Text = $"Refresh failed: {ex.Message}";
+            DetailsStatus.Text = $"Refresh failed: {ex.Message}";
+        }
+        finally { RefreshButton.IsEnabled = true; }
     }
 
     private void PublishSnapshot(List<ProcessRow> details, List<ProcessRow> groups, PriceSnapshot price)
     {
-        MergeRows(_details, details, row => row.Id.ToString(CultureInfo.InvariantCulture), _detailsView);
-        MergeRows(_groups, groups, row => row.Name, _groupsView);
+        MergeRows(_details, details, row => row.Id.ToString(CultureInfo.InvariantCulture));
+        MergeRows(_groups, groups, row => row.Name);
         HeaderPrice.Text = $"{price.RamType}  {price.Symbol}{price.PricePerGb:0.00} / GB";
         UpdateStatus();
         UpdateSummary();
@@ -90,27 +130,20 @@ public partial class MainWindow : Window
     private static void MergeRows(
         ObservableCollection<ProcessRow> target,
         IReadOnlyCollection<ProcessRow> snapshot,
-        Func<ProcessRow, string> keySelector,
-        ICollectionView view)
+        Func<ProcessRow, string> keySelector)
     {
-        // Deferring the initial population avoids hundreds of intermediate collection-view layouts.
-        var defer = target.Count == 0 ? view.DeferRefresh() : null;
-        try
+        var current = target.ToDictionary(keySelector, StringComparer.OrdinalIgnoreCase);
+        var incomingKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var incoming in snapshot)
         {
-            var current = target.ToDictionary(keySelector, StringComparer.OrdinalIgnoreCase);
-            var incomingKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var incoming in snapshot)
-            {
-                var key = keySelector(incoming);
-                incomingKeys.Add(key);
-                if (current.TryGetValue(key, out var existing)) existing.UpdateFrom(incoming);
-                else target.Add(incoming);
-            }
-
-            for (var index = target.Count - 1; index >= 0; index--)
-                if (!incomingKeys.Contains(keySelector(target[index]))) target.RemoveAt(index);
+            var key = keySelector(incoming);
+            incomingKeys.Add(key);
+            if (current.TryGetValue(key, out var existing)) existing.UpdateFrom(incoming);
+            else target.Add(incoming);
         }
-        finally { defer?.Dispose(); }
+
+        for (var index = target.Count - 1; index >= 0; index--)
+            if (!incomingKeys.Contains(keySelector(target[index]))) target.RemoveAt(index);
     }
 
     private static void CalculateCosts(IEnumerable<ProcessRow> rows, PriceSnapshot price)

@@ -23,6 +23,8 @@ public sealed class ProcessRow : INotifyPropertyChanged
     public int InstanceCount { get; set; } = 1;
     public decimal Cost { get; set; }
     public string CurrencySymbol { get; set; } = "\u20AC";
+    public double? HeatLevel { get; private set; }
+    public string? HeatSortMember { get; private set; }
 
     public string MemoryText => FormatBytes(WorkingSetBytes);
     public string PrivateText => FormatBytes(PrivateBytes);
@@ -62,6 +64,14 @@ public sealed class ProcessRow : INotifyPropertyChanged
     }
 
     public void RefreshCalculated() => Notify(nameof(CpuText), nameof(CostText));
+
+    public void SetHeat(string? sortMember, double? level)
+    {
+        if (HeatSortMember == sortMember && HeatLevel == level) return;
+        HeatSortMember = sortMember;
+        HeatLevel = level;
+        Notify(nameof(HeatSortMember), nameof(HeatLevel));
+    }
 
     private void Notify(params string[] names)
     {

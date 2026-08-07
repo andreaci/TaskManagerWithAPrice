@@ -123,6 +123,8 @@ public partial class MainWindow : Window
         MergeRows(_details, details, row => row.Id.ToString(CultureInfo.InvariantCulture));
         MergeRows(_groups, groups, row => row.Name);
         HeaderPrice.Text = $"{price.RamType}  {price.Symbol}{price.PricePerGb:0.00} / GB";
+        UpdateHeatMap(DetailsGrid);
+        UpdateHeatMap(ProcessesGrid);
         UpdateStatus();
         UpdateSummary();
     }
@@ -170,7 +172,68 @@ public partial class MainWindow : Window
     {
         _detailsView.Refresh();
         _groupsView.Refresh();
+        UpdateHeatMap(DetailsGrid);
+        UpdateHeatMap(ProcessesGrid);
         UpdateStatus();
+    }
+
+    private void DataGrid_Sorting(object sender, DataGridSortingEventArgs e)
+    {
+        // Let WPF perform its native sort first, then rebuild the scale for the newly sorted column.
+        var grid = (DataGrid)sender;
+        Dispatcher.BeginInvoke(() => UpdateHeatMap(grid), DispatcherPriority.Background);
+    }
+
+    private void UpdateHeatMap(DataGrid grid)
+    {
+        var allRows = grid == DetailsGrid ? _details : _groups;
+        var sortColumn = grid.Columns.FirstOrDefault(column => column.SortDirection.HasValue);
+        var sortMember = sortColumn?.SortMemberPath;
+        if (string.IsNullOrWhiteSpace(sortMember))
+        {
+            foreach (var row in allRows) row.SetHeat(null, null);
+            return;
+        }
+
+        var visibleValues = grid.Items.Cast<object>()
+            .OfType<ProcessRow>()
+            .Select(row => TryGetNumericValue(row, sortMember, out var value) ? (double?)value : null)
+            .Where(value => value.HasValue)
+            .Select(value => value!.Value)
+            .ToArray();
+        if (visibleValues.Length == 0)
+        {
+            foreach (var row in allRows) row.SetHeat(null, null);
+            return;
+        }
+
+        var minimum = visibleValues.Min();
+        var maximum = visibleValues.Max();
+        var range = maximum - minimum;
+        foreach (var row in allRows)
+        {
+            if (!TryGetNumericValue(row, sortMember, out var value)) row.SetHeat(null, null);
+            else row.SetHeat(sortMember, range <= double.Epsilon ? .5 : Math.Clamp((value - minimum) / range, 0, 1));
+        }
+    }
+
+    private static bool TryGetNumericValue(ProcessRow row, string property, out double value)
+    {
+        value = property switch
+        {
+            nameof(ProcessRow.Id) => row.Id,
+            nameof(ProcessRow.CpuPercent) => row.CpuPercent,
+            nameof(ProcessRow.WorkingSetBytes) => row.WorkingSetBytes,
+            nameof(ProcessRow.Cost) => (double)row.Cost,
+            nameof(ProcessRow.PrivateBytes) => row.PrivateBytes,
+            nameof(ProcessRow.VirtualBytes) => row.VirtualBytes,
+            nameof(ProcessRow.ThreadCount) => row.ThreadCount,
+            nameof(ProcessRow.HandleCount) => row.HandleCount,
+            nameof(ProcessRow.CpuTime) => row.CpuTime?.TotalMilliseconds ?? double.NaN,
+            nameof(ProcessRow.Started) => row.Started?.Ticks ?? double.NaN,
+            _ => double.NaN
+        };
+        return double.IsFinite(value);
     }
 
     private void UpdateStatus()

@@ -59,7 +59,7 @@
               <StackPanel Grid.Column="3" HorizontalAlignment="Center"><TextBlock x:Name="CostSummary" FontSize="17" HorizontalAlignment="Center"/><TextBlock Text="Memory value" Foreground="#666"/></StackPanel>
               <StackPanel Grid.Column="4" HorizontalAlignment="Center"><TextBlock x:Name="ProcessSummary" FontSize="17" HorizontalAlignment="Center"/><TextBlock Text="Processes" Foreground="#666"/></StackPanel>
             </Grid>
-            <DataGrid x:Name="ProcessesGrid" Grid.Row="2" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False" GridLinesVisibility="Vertical" HeadersVisibility="Column" BorderThickness="0" RowHeaderWidth="0" SelectionMode="Single" Sorting="DataGrid_Sorting" EnableRowVirtualization="True" EnableColumnVirtualization="True" VirtualizingPanel.VirtualizationMode="Recycling" ScrollViewer.IsDeferredScrollingEnabled="True">
+            <DataGrid x:Name="ProcessesGrid" Grid.Row="2" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False" CanUserSortColumns="True" GridLinesVisibility="Vertical" HeadersVisibility="Column" BorderThickness="0" RowHeaderWidth="0" SelectionMode="Single" EnableRowVirtualization="True" EnableColumnVirtualization="True" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" ScrollViewer.IsDeferredScrollingEnabled="True">
               <DataGrid.Columns>
                 <DataGridTextColumn Header="Name" Binding="{Binding NameWithCount}" SortMemberPath="DisplayName" Width="*" MinWidth="230"/>
                 <DataGridTextColumn Header="Status" Binding="{Binding Status}" SortMemberPath="Status" Width="90"/>
@@ -78,7 +78,7 @@
           <Grid x:Name="DetailsView" Visibility="Collapsed">
             <Grid.RowDefinitions><RowDefinition Height="50"/><RowDefinition Height="*"/><RowDefinition Height="30"/></Grid.RowDefinitions>
             <TextBlock Text="Details" FontSize="17" FontWeight="SemiBold" Margin="17,0" VerticalAlignment="Center"/>
-            <DataGrid x:Name="DetailsGrid" Grid.Row="1" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False" GridLinesVisibility="Vertical" HeadersVisibility="Column" BorderThickness="0" RowHeaderWidth="0" SelectionMode="Single" Sorting="DataGrid_Sorting" EnableRowVirtualization="True" EnableColumnVirtualization="True" VirtualizingPanel.VirtualizationMode="Recycling" ScrollViewer.IsDeferredScrollingEnabled="True">
+            <DataGrid x:Name="DetailsGrid" Grid.Row="1" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False" CanUserSortColumns="True" GridLinesVisibility="Vertical" HeadersVisibility="Column" BorderThickness="0" RowHeaderWidth="0" SelectionMode="Single" EnableRowVirtualization="True" EnableColumnVirtualization="True" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" ScrollViewer.IsDeferredScrollingEnabled="True">
               <DataGrid.Columns>
                 <DataGridTextColumn Header="Name" Binding="{Binding Name}" SortMemberPath="Name" Width="170"/>
                 <DataGridTextColumn Header="PID" Binding="{Binding Id}" SortMemberPath="Id" Width="75"/>
@@ -104,8 +104,12 @@
           <ScrollViewer x:Name="SettingsView" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
             <StackPanel Margin="28" MaxWidth="700" HorizontalAlignment="Left">
               <TextBlock Text="Settings" FontSize="22" FontWeight="SemiBold"/>
+              <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
+                <Button x:Name="DownloadMarketDataButton" Content="Download latest and clear custom" Click="DownloadMarketData_Click"/>
+                <TextBlock x:Name="MarketDataStatus" Margin="12,0,0,0" Foreground="#555" VerticalAlignment="Center"/>
+              </StackPanel>
               <TextBlock Text="Memory pricing" FontSize="17" FontWeight="SemiBold" Margin="0,28,0,6"/>
-              <TextBlock Text="Enter the market value of one GB of each RAM generation. Values apply to this session only; TaskCost does not write settings to disk." Foreground="#555" TextWrapping="Wrap" Margin="0,0,0,18"/>
+              <TextBlock Text="Downloaded values are cached daily. Editing DDR4 or DDR5 marks RAM pricing as custom and stops automatic RAMTrack updates until custom values are cleared." Foreground="#555" TextWrapping="Wrap" Margin="0,0,0,18"/>
               <Grid>
                 <Grid.ColumnDefinitions><ColumnDefinition Width="130"/><ColumnDefinition Width="170"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                 <Grid.RowDefinitions><RowDefinition Height="44"/><RowDefinition Height="44"/><RowDefinition Height="44"/></Grid.RowDefinitions>
@@ -115,8 +119,7 @@
                 <TextBlock Grid.Column="2" Grid.RowSpan="3" Margin="18,5" Foreground="#666" TextWrapping="Wrap" Text="RAMTrack publishes Dutch retail averages for DDR4 and DDR5. DDR3 is custom-only. The online refresh uses RAMTrack's current, undocumented read-only price endpoint."/>
               </Grid>
               <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
-                <Button Content="Update from RAMTrack" Click="RamTrack_Click"/>
-                <Button Content="Open ramtrack.eu" Click="OpenRamTrack_Click" Margin="8,0,0,0"/>
+                <Button Content="Open ramtrack.eu" Click="OpenRamTrack_Click"/>
                 <TextBlock x:Name="RamTrackStatus" Margin="12,0,0,0" Foreground="#555" VerticalAlignment="Center"/>
               </StackPanel>
 
@@ -126,6 +129,7 @@
                 <Grid.RowDefinitions><RowDefinition Height="48"/><RowDefinition Height="48"/><RowDefinition Height="48"/></Grid.RowDefinitions>
                 <TextBlock Text="Installed RAM type" VerticalAlignment="Center"/><ComboBox x:Name="RamTypeBox" Grid.Column="1" Height="34" VerticalContentAlignment="Center" SelectionChanged="SettingsSelectionChanged"/>
                 <TextBlock Grid.Row="1" Text="Display currency" VerticalAlignment="Center"/><ComboBox x:Name="CurrencyBox" Grid.Row="1" Grid.Column="1" Height="34" VerticalContentAlignment="Center" SelectionChanged="CurrencyBox_SelectionChanged"/>
+                <TextBlock x:Name="ExchangeRateStatus" Grid.Row="1" Grid.Column="2" Margin="12,0,0,0" Foreground="#666" VerticalAlignment="Center"/>
                 <TextBlock Grid.Row="2" Text="EUR conversion rate" VerticalAlignment="Center"/><TextBox x:Name="RateBox" Grid.Row="2" Grid.Column="1" Style="{StaticResource Input}"/>
                 <TextBlock Grid.Row="2" Grid.Column="2" Margin="12,0" VerticalAlignment="Center" Foreground="#666" Text="1 EUR equals this amount; editable for your preferred rate."/>
               </Grid>
@@ -133,7 +137,7 @@
                 <TextBlock x:Name="FormulaPreview" TextWrapping="Wrap"/>
               </Border>
               <StackPanel Orientation="Horizontal">
-                <Button Content="Apply for this session" Background="#0F6CBD" Foreground="White" BorderBrush="#0F6CBD" Click="ApplySettings_Click"/>
+                <Button Content="Save settings" Background="#0F6CBD" Foreground="White" BorderBrush="#0F6CBD" Click="ApplySettings_Click"/>
                 <TextBlock x:Name="SaveStatus" Margin="12,0,0,0" Foreground="#287A32" VerticalAlignment="Center"/>
               </StackPanel>
             </StackPanel>

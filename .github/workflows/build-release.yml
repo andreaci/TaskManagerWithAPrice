@@ -74,18 +74,24 @@ jobs:
           --output publish/win-x64
           --no-restore
           -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:EnableCompressionInSingleFile=true
           -p:DebugType=None
           -p:DebugSymbols=false
 
-      - name: Create release archive
+      - name: Verify single executable output
         shell: pwsh
-        run: Compress-Archive -Path publish/win-x64/* -DestinationPath TaskCost-win-x64.zip
+        run: |
+          $files = @(Get-ChildItem -Path publish/win-x64 -File)
+          if ($files.Count -ne 1 -or $files[0].Name -ne 'TaskCost.exe') {
+            throw "Expected exactly one TaskCost.exe, found: $($files.Name -join ', ')"
+          }
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v6
         with:
           name: TaskCost-win-x64
-          path: TaskCost-win-x64.zip
+          path: publish/win-x64/TaskCost.exe
           if-no-files-found: error
           retention-days: 14
 
@@ -134,7 +140,7 @@ jobs:
           VERSION: ${{ needs.release_metadata.outputs.version }}
         run: >-
           gh release create "$VERSION"
-          TaskCost-win-x64.zip
+          TaskCost.exe
           --verify-tag
           --generate-notes
           --latest

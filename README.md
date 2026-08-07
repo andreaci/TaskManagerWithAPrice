@@ -22,7 +22,13 @@ RAMTrack refresh reads the site's current, undocumented `/api/prices` endpoint a
 
 ## Continuous builds and releases
 
-GitHub Actions builds the application after every push and pull request. Each successful run retains a self-contained Windows x64 ZIP as a workflow artifact for 14 days.
+GitHub Actions builds the application after every push and pull request. Each successful run retains a single self-contained Windows x64 `TaskCost.exe` as a workflow artifact for 14 days. Releases attach the executable directly without a ZIP archive.
+
+Create the same single-file executable locally with:
+
+```powershell
+dotnet publish TaskCost.csproj --configuration Release --runtime win-x64 --self-contained true -p:PublishProfile=SingleExe
+```
 
 Include a semantic version such as `v1.0.0` in the latest commit message on the repository's default branch. After the build passes, GitHub Actions creates the tag and a GitHub Release with generated notes and the packaged application attached:
 
